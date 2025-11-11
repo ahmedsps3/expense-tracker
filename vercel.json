@@ -1,0 +1,10 @@
+{
+  "buildCommand": "pnpm install && pnpm db:push && pnpm build",
+  "devCommand": "pnpm dev",
+  "installCommand": "pnpm install",
+  "framework": "vite",
+  "outputDirectory": "dist",
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
