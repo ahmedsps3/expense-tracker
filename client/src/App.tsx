@@ -10,6 +10,8 @@ import EditTransaction from "./pages/EditTransaction";
 import Transactions from "./pages/Transactions";
 import Statistics from "./pages/Statistics";
 import Budget from "./pages/Budget";
+import MonthlyReport from "./pages/MonthlyReport";
+import Export from "./pages/Export";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -21,6 +23,8 @@ function Router() {
       <Route path="/transactions/edit/:id" component={EditTransaction} />
       <Route path="/statistics" component={Statistics} />
       <Route path="/budget" component={Budget} />
+      <Route path="/monthly-report" component={MonthlyReport} />
+      <Route path="/export" component={Export} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
