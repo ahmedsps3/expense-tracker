@@ -12,8 +12,10 @@ import Statistics from "./pages/Statistics";
 import Budget from "./pages/Budget";
 import MonthlyReport from "./pages/MonthlyReport";
 import Export from "./pages/Export";
+import Splash from "./pages/Splash";
+import { useState, useEffect } from "react";
 
-function Router() {
+function Router({ isAuthenticated }: { isAuthenticated: boolean }) {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
@@ -38,6 +40,44 @@ function Router() {
 // - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
 
 function App() {
+  const [isAppAuthenticated, setIsAppAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Check if user has already authenticated in this session
+    const hasSession = localStorage.getItem("app-session") === "true";
+    setIsAppAuthenticated(hasSession);
+    setIsLoading(false);
+  }, []);
+
+  const handlePasswordCorrect = () => {
+    setIsAppAuthenticated(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-muted-foreground">جاري التحميل...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAppAuthenticated) {
+    return (
+      <ErrorBoundary>
+        <ThemeProvider defaultTheme="light">
+          <TooltipProvider>
+            <Toaster />
+            <Splash onPasswordCorrect={handlePasswordCorrect} />
+          </TooltipProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <ThemeProvider
@@ -46,7 +86,7 @@ function App() {
       >
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Router isAuthenticated={isAppAuthenticated} />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
