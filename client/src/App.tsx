@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import AddTransaction from "./pages/AddTransaction";
+import EditTransaction from "./pages/EditTransaction";
 import Transactions from "./pages/Transactions";
 import Statistics from "./pages/Statistics";
 import Budget from "./pages/Budget";
@@ -17,6 +18,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path="/transactions" component={Transactions} />
       <Route path="/transactions/add/:type" component={AddTransaction} />
+      <Route path="/transactions/edit/:id" component={EditTransaction} />
       <Route path="/statistics" component={Statistics} />
       <Route path="/budget" component={Budget} />
       <Route path={"/404"} component={NotFound} />
