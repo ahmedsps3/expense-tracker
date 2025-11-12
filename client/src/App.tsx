@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { TransactionProvider } from "./contexts/TransactionContext";
 import Home from "./pages/Home";
 import AddTransaction from "./pages/AddTransaction";
 import EditTransaction from "./pages/EditTransaction";
@@ -84,10 +85,12 @@ function App() {
         defaultTheme="light"
         // switchable
       >
-        <TooltipProvider>
-          <Toaster />
-          <Router isAuthenticated={isAppAuthenticated} />
-        </TooltipProvider>
+        <TransactionProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router isAuthenticated={isAppAuthenticated} />
+          </TooltipProvider>
+        </TransactionProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );
