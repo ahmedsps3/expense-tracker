@@ -1,5 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
+import { sdk } from "./sdk";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -10,9 +11,14 @@ export type TrpcContext = {
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
-  // For now, we don't authenticate users server-side
-  // Authentication is handled on the client with password
-  const user: User | null = null;
+  let user: User | null = null;
+
+  try {
+    user = await sdk.authenticateRequest(opts.req);
+  } catch (error) {
+    // Authentication is optional for public procedures.
+    user = null;
+  }
 
   return {
     req: opts.req,
