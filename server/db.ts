@@ -1,91 +1,75 @@
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, categories, transactions, budgets, InsertTransaction, InsertBudget } from "../drizzle/schema";
+import mysql from "mysql2/promise";
+import * as schema from "../drizzle/schema"; // **المسار الصحيح**
+import { InsertUser, users, categories, transactions, budgets, InsertTransaction, InsertBudget, InsertCategory, savings, savingsWithdrawals, InsertSaving, InsertSavingsWithdrawal } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
-let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // **الإصلاح: إنشاء اتصال جديد في كل مرة**
+      const connection = await mysql.createConnection(process.env.DATABASE_URL);
+      return drizzle(connection, { schema, mode: "default" });
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
-      _db = null;
+      return null;
     }
   }
-  return _db;
+  return null;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-
+export async function createUser(user: { email: string; password: string; name?: string | null }): Promise<number> {
   const db = await getDb();
   if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
+    throw new Error("Database not available");
   }
 
-  try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
+  const result = await db.insert(users).values({
+    email: user.email,
+    password: user.password,
+    name: user.name,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    lastSignedIn: new Date(),
+  });
 
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
+  return result[0].insertId;
 }
 
-export async function getUserByOpenId(openId: string) {
+export async function getUserById(id: number) {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateUserLastSignedIn(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update user: database not available");
+    return;
+  }
+
+  await db.update(users)
+    .set({ lastSignedIn: new Date(), updatedAt: new Date() })
+    .where(eq(users.id, userId));
 }
 
 // Categories
@@ -99,6 +83,35 @@ export async function getCategoriesByType(type: "income" | "expense") {
   const db = await getDb();
   if (!db) return [];
   return await db.select().from(categories).where(eq(categories.type, type));
+}
+
+export async function createCategory(category: InsertCategory) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.insert(categories).values(category);
+}
+
+export async function updateCategory(id: number, data: Partial<InsertCategory>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.update(categories)
+    .set(data)
+    .where(eq(categories.id, id));
+}
+
+export async function deleteCategory(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Check if category is used in transactions
+  const usedInTransactions = await db.select().from(transactions)
+    .where(eq(transactions.categoryId, id))
+    .limit(1);
+  
+  if (usedInTransactions.length > 0) {
+    throw new Error("Cannot delete category that is used in transactions");
+  }
+  
+  return await db.delete(categories).where(eq(categories.id, id));
 }
 
 // Transactions
@@ -220,4 +233,90 @@ export async function deleteBudget(id: number, userId: number) {
   if (!db) throw new Error("Database not available");
   return await db.delete(budgets)
     .where(and(eq(budgets.id, id), eq(budgets.userId, userId)));
+}
+
+// Savings
+export async function getUserSavings(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(savings)
+    .where(eq(savings.userId, userId))
+    .orderBy(desc(savings.month));
+}
+
+export async function getSavingsByMonth(userId: number, month: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(savings)
+    .where(and(eq(savings.userId, userId), eq(savings.month, month)))
+    .limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createSaving(saving: InsertSaving) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.insert(savings).values(saving);
+}
+
+export async function updateSaving(id: number, userId: number, data: Partial<InsertSaving>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.update(savings)
+    .set(data)
+    .where(and(eq(savings.id, id), eq(savings.userId, userId)));
+}
+
+export async function deleteSaving(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.delete(savings)
+    .where(and(eq(savings.id, id), eq(savings.userId, userId)));
+}
+
+// Savings Withdrawals
+export async function getUserWithdrawals(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(savingsWithdrawals)
+    .where(eq(savingsWithdrawals.userId, userId))
+    .orderBy(desc(savingsWithdrawals.withdrawalDate));
+}
+
+export async function createWithdrawal(withdrawal: InsertSavingsWithdrawal) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.insert(savingsWithdrawals).values(withdrawal);
+}
+
+export async function deleteWithdrawal(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.delete(savingsWithdrawals)
+    .where(and(eq(savingsWithdrawals.id, id), eq(savingsWithdrawals.userId, userId)));
+}
+
+// Get total savings
+export async function getTotalSavings(userId: number) {
+  const db = await getDb();
+  if (!db) return { totalSavings: 0, totalWithdrawals: 0, balance: 0 };
+  
+  const savingsResult = await db
+    .select({ total: sql<number>`SUM(${savings.amount})` })
+    .from(savings)
+    .where(eq(savings.userId, userId));
+  
+  const withdrawalsResult = await db
+    .select({ total: sql<number>`SUM(${savingsWithdrawals.amount})` })
+    .from(savingsWithdrawals)
+    .where(eq(savingsWithdrawals.userId, userId));
+  
+  const totalSavings = Number(savingsResult[0]?.total || 0);
+  const totalWithdrawals = Number(withdrawalsResult[0]?.total || 0);
+  
+  return {
+    totalSavings,
+    totalWithdrawals,
+    balance: totalSavings - totalWithdrawals,
+  };
 }
